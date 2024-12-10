@@ -69,6 +69,7 @@ msgAvailCars BYTE "Available Cars: ",0
 msgBookedCars BYTE "Booked Cars: ",0
 totalCarsMsg BYTE "Total Cars: ", 0
 availableCarsMsg BYTE "Available Cars: ", 0
+noCarsToDisplayMsg BYTE "No Car available to display",0ah, 0
 emptyArrayMsg BYTE "Empty error: Access to uninitialized memory space", 0
 msgFleetHeader BYTE "Car ID  |  Price/Day  |  Mileage  |  Status",0ah
                BYTE "----------------------------------------",0ah,0
@@ -281,7 +282,6 @@ setColor PROC
     call SetTextColor
     ret
 setColor ENDP
-; Add this procedure to the code section
 
 displayCarDetails PROC
     ; Input: ESI = index of car to display
@@ -341,19 +341,22 @@ displayCarDetails ENDP
 
 ; Here's the corrected searchByPrice procedure that uses displayCarDetails
 searchByPrice PROC
+    LOCAL minPrice:DWORD, maxPrice:DWORD
+    mov ecx, currentCars
+    cmp ecx, 0
+    je no_car_avail
     mov edx, OFFSET msgMinPrice
     call WriteString
     call ReadInt
-    mov ebx, eax    ; Store min price
+    mov minPrice, eax
     
     mov edx, OFFSET msgMaxPrice
     call WriteString
-    call ReadInt    ; Max price in eax
-    
+    call ReadInt
+    mov maxPrice, eax
     mov edx, OFFSET msgFleetHeader
     call WriteString
     
-    mov ecx, currentCars
     mov esi, 0
     
 searchLoop:
@@ -361,9 +364,9 @@ searchLoop:
     
     ; Check price range
     mov ecx, carPrices[esi]
-    cmp ecx, ebx
+    cmp ecx, minPrice
     jl skipCar
-    cmp ecx, eax
+    cmp ecx, maxPrice
     jg skipCar
     
     ; Display car details if in range
@@ -375,7 +378,11 @@ skipCar:
     add esi, 4
     pop ecx
     loop searchLoop
-    
+    jmp exit_func
+no_car_avail:
+    mov edx, OFFSET noCarsToDisplayMsg
+    call WriteString
+exit_func:
     ret
 searchByPrice ENDP
 mainInterface PROC
@@ -626,15 +633,19 @@ full:
 addNewCar ENDP
 
 displayFleet PROC
-    xor esi, esi        ; Initialize counter to 0
-    mov ebx, LENGTHOF carIds  ; Get total number of cars to display
-
+    LOCAL count:DWORD, carLength:DWORD
+    xor esi, esi
+    mov carLength, LENGTHOF carIds
+    mov count, 0
 displayLoop1:
-    cmp esi, ebx        ; Compare counter with total cars
-    jae empty_fleet     ; If counter >= total, exit routine
+    mov ebx, carLength
+    cmp count, ebx
+    jae empty_fleet     
 
     ; Display Car ID
     mov eax, carIds[esi]
+    cmp eax, 0
+	je empty_fleet
     call WriteDec
     mov al, ' '
     call WriteChar
@@ -679,6 +690,7 @@ show_available:
     call WriteString
 
 next_car:
+    inc count
     add esi, 4          ; Move to next car (4 bytes per entry)
     jmp displayLoop1    ; Continue loop
 
@@ -691,6 +703,8 @@ displayAvailableCars PROC
     call WriteString
     
     mov ecx, currentCars
+    cmp ecx, 0
+    je no_car_to_display
     mov esi, 0
     
 displayLoop:
@@ -732,13 +746,19 @@ skip_car:
     add esi, 4
     pop ecx
     loop displayLoop
-    
+    jmp exit_func
+no_car_to_display:
+    mov edx, offset noCarsToDisplayMsg
+    call writeString
+exit_func:
     ret
 displayAvailableCars ENDP
 
 createBooking PROC
     call displayAvailableCars
-    
+    mov ecx, currentCars
+    cmp ecx, 0
+    je exit_func
     mov edx, OFFSET msgCarId
     call WriteString
     call ReadInt
@@ -746,7 +766,6 @@ createBooking PROC
     mov carIndex, eax
     
     ; Find car
-    mov ecx, currentCars
     mov esi, 0
     
 findCar:
@@ -776,10 +795,14 @@ carFound:
 alreadyBooked:
     mov edx, OFFSET msgCarBooked
     call WriteString
+exit_func:
     ret
 createBooking ENDP
 
 processReturn PROC
+    mov ecx, currentCars
+    cmp ecx, 0
+    je no_car_avail
     mov edx, OFFSET msgCarId
     call WriteString
     call ReadInt
@@ -787,7 +810,6 @@ processReturn PROC
     mov carIndex, eax
     
     ; Find car
-    mov ecx, currentCars
     mov esi, 0
     
 findCar:
@@ -823,15 +845,21 @@ get_mileage:
     je get_mileage
     
     mov carMileage[esi], eax
-    mov carStatus[ebx], 0
+    mov carStatus[esi], 0
     
     mov edx, OFFSET msgSuccess
     call WriteString
+    exit_func:
     ret
     
 notBooked:
     mov edx, OFFSET msgCarNotBooked
     call WriteString
+    jmp exit_func2
+no_car_avail:
+    mov edx, OFFSET noCarsToDisplayMsg
+    call WriteString
+exit_func2:
     ret
 processReturn ENDP
 
